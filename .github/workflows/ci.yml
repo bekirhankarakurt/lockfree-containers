@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: ${{ matrix.compiler.name }} / ${{ matrix.build_type }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler:
+          - { name: gcc, cxx: g++ }
+          - { name: clang, cxx: clang++ }
+        build_type: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DLFC_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build build -j "$(nproc)"
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Benchmark (quick)
+        if: matrix.build_type == 'Release'
+        run: ./build/bench/lfc_bench --quick
+
+  sanitizers:
+    name: ${{ matrix.sanitizer }} sanitizer
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, thread]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reduce ASLR entropy (TSan needs it on recent kernels)
+        if: matrix.sanitizer == 'thread'
+        run: sudo sysctl vm.mmap_rnd_bits=28
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DLFC_SANITIZER=${{ matrix.sanitizer }}
+          -DLFC_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build build -j "$(nproc)"
+      - name: Test (repeated to shake out rare interleavings)
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
+        run: ctest --test-dir build --output-on-failure --repeat until-fail:3
+
+  install:
+    name: install + find_package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install
+        run: |
+          cmake -S . -B build -DLFC_BUILD_TESTS=OFF -DLFC_BUILD_BENCHMARKS=OFF -DLFC_BUILD_EXAMPLES=OFF
+          cmake --install build --prefix "$RUNNER_TEMP/lfc"
+      - name: Build consumer against installed package
+        run: |
+          cmake -S tests/package_consumer -B consumer -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/lfc"
+          cmake --build consumer
+          ./consumer/package_consumer
