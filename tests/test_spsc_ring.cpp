@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 #include <cstdint>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -10,6 +9,7 @@
 #include "test_support.hpp"
 
 using lfc::SpscRing;
+using lfc_test::MoveOnly;
 using lfc_test::Tracked;
 
 TEST_CASE("spsc: capacity rounds up to power of two") {
@@ -63,7 +63,7 @@ TEST_CASE("spsc: front/pop_front peek interface") {
     SpscRing<std::string> ring(2);
     CHECK(ring.front() == nullptr);
     CHECK(ring.try_emplace(3U, 'x'));
-    std::string* const head = ring.front();
+    const std::string* const head = ring.front();
     REQUIRE(head != nullptr);
     CHECK(*head == "xxx");
     ring.pop_front();
@@ -71,14 +71,16 @@ TEST_CASE("spsc: front/pop_front peek interface") {
 }
 
 TEST_CASE("spsc: move-only types and failed push keeps value") {
-    SpscRing<std::unique_ptr<int>> ring(1);
-    CHECK(ring.try_push(std::make_unique<int>(1)));
-    auto second = std::make_unique<int>(2);
+    SpscRing<MoveOnly> ring(1);
+    CHECK(ring.try_push(MoveOnly{1}));
+    MoveOnly second{2};
     CHECK(!ring.try_push(std::move(second)));
-    CHECK(second != nullptr);  // NOLINT(bugprone-use-after-move,hicpp-invalid-access-moved)
+    // A rejected push must not consume its argument.
+    // cppcheck-suppress accessMoved
+    CHECK(second.value == 2);  // NOLINT(bugprone-use-after-move)
     auto out = ring.try_pop();
     REQUIRE(out.has_value());
-    CHECK(**out == 1);
+    CHECK(out->value == 1);
 }
 
 TEST_CASE("spsc: destructor destroys remaining elements") {

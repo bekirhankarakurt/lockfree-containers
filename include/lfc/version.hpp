@@ -3,7 +3,13 @@
 /// @brief Library version macros.
 #pragma once
 
-#define LFC_VERSION_MAJOR 1
-#define LFC_VERSION_MINOR 0
-#define LFC_VERSION_PATCH 0
+/// Version string, usable in preprocessor-free contexts such as printf.
 #define LFC_VERSION_STRING "1.0.0"
+
+namespace lfc {
+
+inline constexpr int kVersionMajor = 1;
+inline constexpr int kVersionMinor = 0;
+inline constexpr int kVersionPatch = 0;
+
+}  // namespace lfc

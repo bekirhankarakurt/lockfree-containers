@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
+#include <array>
 #include <atomic>
 #include <cstdint>
+#include <numeric>
 #include <thread>
 #include <vector>
 
@@ -49,20 +51,14 @@ TEST_CASE("seqlock: store and load single-threaded") {
 
 TEST_CASE("seqlock: odd-sized payload") {
     struct Odd {
-        char bytes[13];  // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+        std::array<char, 13> bytes;
     };
     Seqlock<Odd> lock;
     Odd value{};
-    for (int i = 0; i < 13; ++i) {
-        value.bytes[i] = static_cast<char>('a' + i);
-    }
+    std::iota(value.bytes.begin(), value.bytes.end(), 'a');
     lock.store(value);
     const Odd out = lock.load();
-    bool same = true;
-    for (int i = 0; i < 13; ++i) {
-        same = same && out.bytes[i] == value.bytes[i];
-    }
-    CHECK(same);
+    CHECK(out.bytes == value.bytes);
 }
 
 TEST_CASE("seqlock: readers never observe torn or regressing values") {

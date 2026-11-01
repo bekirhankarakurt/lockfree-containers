@@ -5,7 +5,7 @@
 
 #include <atomic>
 #include <cstddef>
-#include <memory>
+#include <vector>
 #include <new>
 #include <optional>
 #include <stdexcept>
@@ -37,7 +37,7 @@ public:
     explicit SpscRing(std::size_t min_capacity)
         : capacity_(validated(min_capacity)),
           mask_(capacity_ - 1),
-          slots_(std::make_unique<detail::RawStorage<T>[]>(capacity_)) {}
+          slots_(capacity_) {}
 
     SpscRing(const SpscRing&) = delete;
     SpscRing& operator=(const SpscRing&) = delete;
@@ -68,7 +68,7 @@ public:
                 return false;
             }
         }
-        ::new (static_cast<void*>(slots_[tail & mask_].bytes)) T(std::forward<Args>(args)...);
+        ::new (slots_[tail & mask_].raw()) T(std::forward<Args>(args)...);
         // release: publishes the constructed element; pairs with the consumer's
         // acquire load of producer_.index.
         producer_.index.store(tail + 1, std::memory_order_release);
@@ -162,7 +162,7 @@ private:
 
     const std::size_t capacity_;
     const std::size_t mask_;
-    const std::unique_ptr<detail::RawStorage<T>[]> slots_;  // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+    std::vector<detail::RawStorage<T>> slots_;
     Side producer_;
     Side consumer_;
 };

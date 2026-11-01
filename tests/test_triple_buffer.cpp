@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <string>
@@ -67,9 +68,7 @@ TEST_CASE("triple buffer: concurrent writer/reader see consistent, monotonic fra
     for (std::uint64_t i = 1; i <= frames; ++i) {
         Frame& f = buffer.write_buffer();
         f.id = i;
-        for (auto& s : f.samples) {
-            s = i;
-        }
+        std::fill(f.samples.begin(), f.samples.end(), i);
         buffer.publish();
     }
     done.store(true, std::memory_order_release);

@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <thread>
 #include <vector>
 
@@ -33,9 +34,7 @@ struct Status {
     double last_command = 0;
 };
 
-}  // namespace
-
-int main() {
+int run() {
     using namespace std::chrono_literals;
     constexpr std::uint64_t kTicks = 2000;
 
@@ -75,6 +74,7 @@ int main() {
     // Worker pool: processes jobs handed off by the control loop.
     std::atomic<std::uint64_t> jobs_done{0};
     std::vector<std::thread> workers;
+    workers.reserve(2);
     for (int i = 0; i < 2; ++i) {
         workers.emplace_back([&] {
             std::uint64_t job = 0;
@@ -116,4 +116,15 @@ int main() {
     std::printf("jobs processed  : %llu\n",
                 static_cast<unsigned long long>(jobs_done.load()));
     return final_status.tick == kTicks ? 0 : 1;
+}
+
+}  // namespace
+
+int main() {
+    try {
+        return run();
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "sensor_pipeline: %s\n", e.what());
+        return 1;
+    }
 }

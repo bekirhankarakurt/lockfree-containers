@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include <atomic>
 #include <cstdint>
-#include <memory>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -11,6 +10,7 @@
 #include "test_support.hpp"
 
 using lfc::LockFreeStack;
+using lfc_test::MoveOnly;
 using lfc_test::Tracked;
 
 TEST_CASE("stack: lifo order, full and empty") {
@@ -34,16 +34,20 @@ TEST_CASE("stack: lifo order, full and empty") {
 
 TEST_CASE("stack: move-only and destructor cleanup") {
     {
-        LockFreeStack<std::unique_ptr<Tracked>> stack(4);
-        CHECK(stack.try_push(std::make_unique<Tracked>(1)));
-        CHECK(stack.try_push(std::make_unique<Tracked>(2)));
-        std::unique_ptr<Tracked> out;
+        LockFreeStack<Tracked> stack(4);
+        CHECK(stack.try_emplace(1));
+        CHECK(stack.try_emplace(2));
+        Tracked out;
         CHECK(stack.try_pop(out));
-        REQUIRE(out != nullptr);
-        CHECK(out->value == 2);
-        CHECK(Tracked::live().load() == 2);
+        CHECK(out.value == 2);
+        CHECK(Tracked::live().load() == 2);  // one in the stack + `out`
     }
     CHECK(Tracked::live().load() == 0);
+    LockFreeStack<MoveOnly> moves(2);
+    CHECK(moves.try_push(MoveOnly{9}));
+    const auto popped = moves.try_pop();
+    REQUIRE(popped.has_value());
+    CHECK(popped->value == 9);
 }
 
 namespace {
