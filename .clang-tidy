@@ -1,0 +1,38 @@
+---
+# Static analysis profile. Noisy or style-only checks that conflict with
+# low-level lock-free code (raw storage, placement new, magic numbers in
+# tests/benchmarks) are disabled explicitly with a reason in README.
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  cppcoreguidelines-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -bugprone-easily-swappable-parameters,
+  -cert-err33-c,
+  -cert-err58-cpp,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-macro-usage,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-avoid-do-while,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -cppcoreguidelines-avoid-const-or-ref-data-members,
+  -modernize-use-trailing-return-type,
+  -readability-magic-numbers,
+  -readability-identifier-length,
+  -readability-function-cognitive-complexity,
+  -readability-uppercase-literal-suffix,
+  -readability-implicit-bool-conversion
+WarningsAsErrors: '*'
+HeaderFilterRegex: '(include/lfc|tests|bench|examples)/.*'
+FormatStyle: none
+CheckOptions:
+  - key: readability-function-size.LineThreshold
+    value: '120'
+...

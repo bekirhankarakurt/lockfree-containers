@@ -81,3 +81,20 @@ jobs:
           cmake -S tests/package_consumer -B consumer -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/lfc"
           cmake --build consumer
           ./consumer/package_consumer
+
+  static-analysis:
+    name: clang-tidy + cppcheck
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q cppcheck clang-tidy
+      - name: cppcheck
+        run: >
+          cppcheck --enable=warning,performance,portability,style --std=c++17 --language=c++
+          --inline-suppr --error-exitcode=1 --suppress=missingIncludeSystem
+          -I include --quiet include tests bench examples
+      - name: Configure (compile database)
+        run: cmake -S . -B build -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      - name: clang-tidy
+        run: run-clang-tidy -p build -quiet
