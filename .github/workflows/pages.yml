@@ -1,0 +1,59 @@
+name: Docs & Coverage
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q doxygen graphviz
+          pipx install gcovr
+      - name: Build with coverage
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DLFC_COVERAGE=ON -DLFC_BUILD_BENCHMARKS=OFF
+          cmake --build build -j "$(nproc)"
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
+      - name: Coverage report
+        run: |
+          mkdir -p site/coverage
+          gcovr --root . --filter 'include/lfc/' \
+            --html-details site/coverage/index.html \
+            --json-summary site/coverage/summary.json \
+            --print-summary
+          python3 scripts/coverage_badge.py site/coverage/summary.json site/coverage/badge.json
+      - name: API documentation
+        run: |
+          doxygen docs/Doxyfile
+          mv build/docs/html site/api
+      - name: Landing page
+        run: cp docs/index.html site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
