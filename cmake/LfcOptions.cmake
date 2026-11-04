@@ -25,7 +25,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     endif()
 
     if(LFC_COVERAGE)
-        target_compile_options(lfc_project_options INTERFACE --coverage -O0 -g)
+        # Atomic counters: the tests are multi-threaded, and racy counters
+        # produce corrupt (negative) hit counts.
+        target_compile_options(lfc_project_options INTERFACE --coverage -fprofile-update=atomic -O0 -g)
         target_link_options(lfc_project_options INTERFACE --coverage)
     endif()
 elseif(MSVC)
