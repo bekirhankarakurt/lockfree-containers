@@ -11,6 +11,7 @@
 #include <fstream>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "lfc/lfc.hpp"
@@ -254,6 +255,47 @@ template <typename Write, typename Read>
 
 // ------------------------------------------------------------------- output
 
+/// Streams a Markdown table whose columns are padded to fixed widths, so the
+/// output is readable in a terminal and can be pasted into Markdown as-is.
+class Table {
+public:
+    /// The first column is left-aligned, all others right-aligned.
+    explicit Table(std::vector<std::string> header) : header_(std::move(header)) {
+        widths_.reserve(header_.size());
+        for (std::size_t i = 0; i < header_.size(); ++i) {
+            widths_.push_back(std::max<std::size_t>(header_[i].size(), i == 0 ? 20 : 9));
+        }
+        print_row(header_);
+        std::string rule = "|";
+        for (std::size_t i = 0; i < widths_.size(); ++i) {
+            rule += i == 0 ? std::string(widths_[i] + 2, '-') : std::string(widths_[i] + 1, '-') + ":";
+            rule += "|";
+        }
+        std::printf("%s\n", rule.c_str());
+    }
+
+    void print_row(const std::vector<std::string>& cells) const {
+        std::string line = "|";
+        for (std::size_t i = 0; i < cells.size() && i < widths_.size(); ++i) {
+            const std::string pad(widths_[i] > cells[i].size() ? widths_[i] - cells[i].size() : 0, ' ');
+            line += " " + (i == 0 ? cells[i] + pad : pad + cells[i]) + " |";
+        }
+        std::printf("%s\n", line.c_str());
+        std::fflush(stdout);
+    }
+
+private:
+    std::vector<std::string> header_;
+    std::vector<std::size_t> widths_;
+};
+
+/// Formats @p value with @p decimals digits and an optional suffix.
+[[nodiscard]] std::string fmt(double value, int decimals, const char* suffix = "") {
+    std::array<char, 64> text{};
+    std::snprintf(text.data(), text.size(), "%.*f%s", decimals, value, suffix);
+    return text.data();
+}
+
 [[nodiscard]] std::string cpu_model() {
     std::ifstream cpuinfo("/proc/cpuinfo");
     std::string line;
@@ -288,8 +330,8 @@ void run_queue_section(const Options& opt) {
     using Mutex = lfc_bench::MutexQueue<std::uint64_t>;
 
     std::printf("## Queue throughput (M items/s, higher is better)\n\n");
-    std::printf("| Producers x Consumers | lfc::SpscRing | lfc::MpmcQueue | mutex + std::queue | Best speed-up |\n");
-    std::printf("|---|---:|---:|---:|---:|\n");
+    const Table table({"Producers x Consumers", "lfc::SpscRing", "lfc::MpmcQueue", "mutex + std::queue",
+                       "Best speed-up"});
     const std::array<std::pair<unsigned, unsigned>, 5> scenarios{
         {{1, 1}, {2, 2}, {4, 4}, {4, 1}, {1, 4}}};
     for (const auto& scenario : scenarios) {
@@ -301,14 +343,11 @@ void run_queue_section(const Options& opt) {
         std::string spsc_cell = "-";
         if (p == 1 && c == 1) {
             const double spsc = best_of(opt.repeats, [&] { return queue_throughput<Spsc>(1, 1, opt.ops); });
-            std::array<char, 32> text{};
-            std::snprintf(text.data(), text.size(), "%.1f", spsc);
-            spsc_cell = text.data();
+            spsc_cell = fmt(spsc, 1);
             best = std::max(best, spsc);
         }
-        std::printf("| %u x %u | %s | %.1f | %.1f | %.1fx |\n", p, c, spsc_cell.c_str(), mpmc, mutex,
-                    best / mutex);
-        std::fflush(stdout);
+        table.print_row({std::to_string(p) + " x " + std::to_string(c), spsc_cell, fmt(mpmc, 1),
+                         fmt(mutex, 1), fmt(best / mutex, 1, "x")});
     }
     std::printf("\n");
 }
@@ -318,24 +357,20 @@ void run_stack_section(const Options& opt) {
     using Mutex = lfc_bench::MutexStack<std::uint64_t>;
 
     std::printf("## Stack throughput (M push+pop pairs/s, higher is better)\n\n");
-    std::printf("| Threads | lfc::LockFreeStack | mutex + std::vector | Speed-up |\n");
-    std::printf("|---|---:|---:|---:|\n");
+    const Table table({"Threads", "lfc::LockFreeStack", "mutex + std::vector", "Speed-up"});
     for (const unsigned threads : {1U, 2U, 4U}) {
         const double lf = best_of(opt.repeats, [&] { return stack_throughput<Stack>(threads, opt.ops / 2); });
         const double mx = best_of(opt.repeats, [&] { return stack_throughput<Mutex>(threads, opt.ops / 2); });
-        std::printf("| %u | %.1f | %.1f | %.1fx |\n", threads, lf, mx, lf / mx);
-        std::fflush(stdout);
+        table.print_row({std::to_string(threads), fmt(lf, 1), fmt(mx, 1), fmt(lf / mx, 1, "x")});
     }
     std::printf("\n");
 }
 
 void run_latency_section(const Options& opt) {
     std::printf("## Round-trip latency, 1 x 1 ping-pong (ns, lower is better)\n\n");
-    std::printf("| Queue | p50 | p90 | p99 | p99.9 | max |\n");
-    std::printf("|---|---:|---:|---:|---:|---:|\n");
-    const auto row = [](const char* name, const Percentiles& p) {
-        std::printf("| %s | %.0f | %.0f | %.0f | %.0f | %.0f |\n", name, p.p50, p.p90, p.p99, p.p999, p.max);
-        std::fflush(stdout);
+    const Table table({"Queue", "p50", "p90", "p99", "p99.9", "max"});
+    const auto row = [&table](const char* name, const Percentiles& p) {
+        table.print_row({name, fmt(p.p50, 0), fmt(p.p90, 0), fmt(p.p99, 0), fmt(p.p999, 0), fmt(p.max, 0)});
     };
     row("lfc::SpscRing", round_trip_latency<lfc::SpscRing<std::uint64_t>>(opt.latency_samples));
     row("lfc::MpmcQueue", round_trip_latency<lfc::MpmcQueue<std::uint64_t>>(opt.latency_samples));
@@ -346,11 +381,9 @@ void run_latency_section(const Options& opt) {
 
 void run_register_section(const Options& opt) {
     std::printf("## Latest-value sharing, 1 writer + 1 reader, 64-byte sample (M ops/s)\n\n");
-    std::printf("| Primitive | Reads/s | Writes/s |\n");
-    std::printf("|---|---:|---:|\n");
-    const auto row = [](const char* name, const RegisterResult& r) {
-        std::printf("| %s | %.1f | %.1f |\n", name, r.reads_per_sec_m, r.writes_per_sec_m);
-        std::fflush(stdout);
+    const Table table({"Primitive", "Reads/s", "Writes/s"});
+    const auto row = [&table](const char* name, const RegisterResult& r) {
+        table.print_row({name, fmt(r.reads_per_sec_m, 1), fmt(r.writes_per_sec_m, 1)});
     };
     {
         lfc::Seqlock<Sample> seqlock;
