@@ -1,0 +1,3 @@
+add_executable(sensor_pipeline sensor_pipeline.cpp)
+target_link_libraries(sensor_pipeline PRIVATE lfc::lfc lfc_project_options)
+add_test(NAME example_sensor_pipeline COMMAND sensor_pipeline)
