@@ -1,0 +1,46 @@
+name: Bug report
+description: Report incorrect behaviour, a crash, or a sanitizer finding.
+labels: [bug]
+body:
+  - type: dropdown
+    id: container
+    attributes:
+      label: Container
+      options:
+        - SpscRing
+        - MpmcQueue
+        - LockFreeStack
+        - Seqlock
+        - TripleBuffer
+        - Build / packaging
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Expected vs. actual behaviour.
+    validations:
+      required: true
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Minimal reproducer
+      description: Element type, number of producer/consumer threads, and code.
+      render: cpp
+    validations:
+      required: true
+  - type: textarea
+    id: sanitizer
+    attributes:
+      label: Sanitizer output
+      description: ThreadSanitizer / AddressSanitizer report, if any.
+      render: text
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "lfc 1.0.0, GCC 13.3, Ubuntu 24.04, x86-64, -O2"
+    validations:
+      required: true
