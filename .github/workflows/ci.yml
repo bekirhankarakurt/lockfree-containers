@@ -25,7 +25,7 @@ jobs:
           - { name: clang, cxx: clang++ }
         build_type: [Debug, Release]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Configure
         run: >
           cmake -S . -B build
@@ -48,7 +48,7 @@ jobs:
       matrix:
         sanitizer: [address, thread]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Reduce ASLR entropy (TSan needs it on recent kernels)
         if: matrix.sanitizer == 'thread'
         run: sudo sysctl vm.mmap_rnd_bits=28
@@ -71,7 +71,7 @@ jobs:
     name: install + find_package
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install
         run: |
           cmake -S . -B build -DLFC_BUILD_TESTS=OFF -DLFC_BUILD_BENCHMARKS=OFF -DLFC_BUILD_EXAMPLES=OFF
@@ -86,7 +86,7 @@ jobs:
     name: clang-tidy + cppcheck
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install tools
         run: sudo apt-get update -q && sudo apt-get install -y -q cppcheck clang-tidy
       - name: cppcheck
