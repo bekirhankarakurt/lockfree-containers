@@ -2,6 +2,7 @@
 // Minimal, dependency-free unit test harness.
 #pragma once
 
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -22,8 +23,9 @@ inline std::vector<TestCase>& registry() {
     return tests;
 }
 
-inline int& failure_count() {
-    static int failures = 0;
+/// Total failed checks so far (atomic so checks are safe from worker threads).
+inline std::atomic<int>& failure_count() {
+    static std::atomic<int> failures{0};
     return failures;
 }
 
@@ -42,7 +44,7 @@ inline void report_failure(const char* file, int line, const char* expr) {
 inline int run_all() {
     int failed_tests = 0;
     for (const auto& test : registry()) {
-        const int before = failure_count();
+        const int before = failure_count().load();
         std::printf("[ RUN  ] %s\n", test.name);
         try {
             test.body();
@@ -50,7 +52,7 @@ inline int run_all() {
             std::fprintf(stderr, "  FAILED: unexpected exception: %s\n", e.what());
             ++failure_count();
         }
-        const bool ok = failure_count() == before;
+        const bool ok = failure_count().load() == before;
         std::printf("[ %s ] %s\n", ok ? " OK " : "FAIL", test.name);
         failed_tests += ok ? 0 : 1;
     }

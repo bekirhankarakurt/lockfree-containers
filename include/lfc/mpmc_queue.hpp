@@ -6,7 +6,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <memory>
+#include <vector>
 #include <new>
 #include <optional>
 #include <stdexcept>
@@ -49,7 +49,7 @@ public:
     explicit MpmcQueue(std::size_t min_capacity)
         : capacity_(validated(min_capacity)),
           mask_(capacity_ - 1),
-          cells_(std::make_unique<Cell[]>(capacity_)) {  // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+          cells_(capacity_) {
         for (std::size_t i = 0; i < capacity_; ++i) {
             cells_[i].sequence.store(i, std::memory_order_relaxed);
         }
@@ -98,7 +98,7 @@ public:
                 pos = enqueue_pos_.value.load(std::memory_order_relaxed);
             }
         }
-        ::new (static_cast<void*>(cell->storage.bytes)) T(std::forward<Args>(args)...);
+        ::new (cell->storage.raw()) T(std::forward<Args>(args)...);
         // release: publishes the element to the consumer that claims `pos`.
         cell->sequence.store(pos + 1, std::memory_order_release);
         return true;
@@ -203,7 +203,7 @@ private:
 
     const std::size_t capacity_;
     const std::size_t mask_;
-    const std::unique_ptr<Cell[]> cells_;  // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+    std::vector<Cell> cells_;
     PaddedPos enqueue_pos_;
     PaddedPos dequeue_pos_;
 };

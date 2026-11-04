@@ -7,7 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <memory>
+#include <vector>
 #include <new>
 #include <optional>
 #include <stdexcept>
@@ -42,7 +42,7 @@ public:
     /// @param capacity Maximum number of elements (1 .. 2^32 - 2).
     /// @throws std::invalid_argument if @p capacity is out of range.
     explicit LockFreeStack(std::size_t capacity)
-        : capacity_(validated(capacity)), nodes_(std::make_unique<Node[]>(capacity_)) {  // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+        : capacity_(validated(capacity)), nodes_(capacity_) {
         // Thread all nodes onto the free list: 0 -> 1 -> ... -> capacity-1.
         for (std::size_t i = 0; i + 1 < capacity_; ++i) {
             nodes_[i].next.store(static_cast<Index>(i + 1), std::memory_order_relaxed);
@@ -74,17 +74,10 @@ public:
         if (index == kNull) {
             return false;
         }
-        Node& node = nodes_[index];
-        if constexpr (std::is_nothrow_constructible_v<T, Args&&...>) {
-            ::new (static_cast<void*>(node.storage.bytes)) T(std::forward<Args>(args)...);
-        } else {
-            try {
-                ::new (static_cast<void*>(node.storage.bytes)) T(std::forward<Args>(args)...);
-            } catch (...) {
-                push_node(free_, index);  // give the node back before rethrowing
-                throw;
-            }
-        }
+        // If T's constructor throws, the guard returns the node to the pool.
+        NodeGuard guard{*this, index};
+        ::new (nodes_[index].storage.raw()) T(std::forward<Args>(args)...);
+        guard.release();
         push_node(data_, index);
         return true;
     }
@@ -146,6 +139,27 @@ private:
         // thread is concurrently relinking; the tag CAS discards that value.
         std::atomic<Index> next{kNull};
         detail::RawStorage<T> storage;
+    };
+
+    /// RAII: gives a free-list node back unless release() is called.
+    class NodeGuard {
+    public:
+        NodeGuard(LockFreeStack& owner, Index index) noexcept : owner_(owner), index_(index) {}
+        NodeGuard(const NodeGuard&) = delete;
+        NodeGuard& operator=(const NodeGuard&) = delete;
+        NodeGuard(NodeGuard&&) = delete;
+        NodeGuard& operator=(NodeGuard&&) = delete;
+        ~NodeGuard() {
+            if (armed_) {
+                owner_.push_node(owner_.free_, index_);
+            }
+        }
+        void release() noexcept { armed_ = false; }
+
+    private:
+        LockFreeStack& owner_;
+        Index index_;
+        bool armed_ = true;
     };
 
     struct alignas(kCacheLineSize) Head {
@@ -212,7 +226,7 @@ private:
     }
 
     const std::size_t capacity_;
-    const std::unique_ptr<Node[]> nodes_;  // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+    std::vector<Node> nodes_;
     Head data_;
     Head free_;
 };

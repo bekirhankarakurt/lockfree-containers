@@ -42,7 +42,7 @@ std::vector<Script> random_scripts(std::mt19937& rng, unsigned threads) {
 /// Runs one thread's script; pushes use unique values (thread * 100 + i).
 template <typename Container, typename Pop>
 void run_script(Container& c, const Script& script, unsigned thread, HistoryClock& clock,
-                lfc_test::StartGate& gate, std::vector<Op>& out, Pop&& pop) {
+                lfc_test::StartGate& gate, std::vector<Op>& out, const Pop& pop) {
     gate.arrive_and_wait();
     int i = 0;
     for (const bool is_push : script) {
@@ -74,7 +74,7 @@ bool linearizable(const std::vector<std::vector<Op>>& per_thread, Model model) {
 }  // namespace
 
 TEST_CASE("linearizability: MPMC queue (blocking pops)") {
-    std::mt19937 rng(12345);
+    std::mt19937 rng(12345);  // NOLINT(cert-msc32-c,cert-msc51-cpp): fixed seed keeps failures reproducible
     const std::size_t rounds = lfc_test::scaled(3000);
     std::size_t failures = 0;
     for (std::size_t round = 0; round < rounds; ++round) {
@@ -85,11 +85,11 @@ TEST_CASE("linearizability: MPMC queue (blocking pops)") {
         auto scripts = random_scripts(rng, kThreads);
         for (auto& s : scripts) {
             int balance = 0;
-            for (std::size_t k = 0; k < s.size(); ++k) {
-                if (!s[k] && balance <= 0) {
-                    s[k] = true;
+            for (auto&& is_push : s) {
+                if (!is_push && balance <= 0) {
+                    is_push = true;
                 }
-                balance += s[k] ? 1 : -1;
+                balance += is_push ? 1 : -1;
             }
         }
         lfc::MpmcQueue<int> queue(64);
@@ -116,7 +116,7 @@ TEST_CASE("linearizability: MPMC queue (blocking pops)") {
 }
 
 TEST_CASE("linearizability: lock-free stack (including empty pops)") {
-    std::mt19937 rng(777);
+    std::mt19937 rng(777);  // NOLINT(cert-msc32-c,cert-msc51-cpp): fixed seed keeps failures reproducible
     const std::size_t rounds = lfc_test::scaled(3000);
     std::size_t failures = 0;
     for (std::size_t round = 0; round < rounds; ++round) {

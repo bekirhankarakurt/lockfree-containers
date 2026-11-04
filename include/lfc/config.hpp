@@ -3,6 +3,7 @@
 /// @brief Shared configuration: cache-line size and padding helpers.
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <new>
 
@@ -49,11 +50,18 @@ namespace detail {
 /// manually with placement new / explicit destructor calls.
 template <typename T>
 struct alignas(T) RawStorage {
-    std::byte bytes[sizeof(T)];  // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+    std::array<std::byte, sizeof(T)> bytes{};
 
-    [[nodiscard]] T* ptr() noexcept { return std::launder(reinterpret_cast<T*>(bytes)); }  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+    /// Address to placement-new a `T` into.
+    [[nodiscard]] void* raw() noexcept { return bytes.data(); }
+
+    // reinterpret_cast is inherent to raw object storage; std::launder makes
+    // access to the object created by placement new well-defined.
+    [[nodiscard]] T* ptr() noexcept {
+        return std::launder(reinterpret_cast<T*>(bytes.data()));  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+    }
     [[nodiscard]] const T* ptr() const noexcept {
-        return std::launder(reinterpret_cast<const T*>(bytes));  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+        return std::launder(reinterpret_cast<const T*>(bytes.data()));  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
     }
 };
 

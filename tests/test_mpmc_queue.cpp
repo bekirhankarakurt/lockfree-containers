@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include <atomic>
 #include <cstdint>
-#include <memory>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -11,6 +10,7 @@
 #include "test_support.hpp"
 
 using lfc::MpmcQueue;
+using lfc_test::MoveOnly;
 using lfc_test::Tracked;
 
 TEST_CASE("mpmc: capacity rules") {
@@ -39,11 +39,11 @@ TEST_CASE("mpmc: single-threaded fifo, full, empty, wrap") {
 }
 
 TEST_CASE("mpmc: move-only payload") {
-    MpmcQueue<std::unique_ptr<int>> queue(2);
-    CHECK(queue.try_emplace(std::make_unique<int>(7)));
+    MpmcQueue<MoveOnly> queue(2);
+    CHECK(queue.try_emplace(7));
     auto out = queue.try_pop();
     REQUIRE(out.has_value());
-    CHECK(**out == 7);
+    CHECK(out->value == 7);
 }
 
 TEST_CASE("mpmc: destructor destroys remaining elements") {

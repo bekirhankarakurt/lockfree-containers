@@ -148,7 +148,7 @@ template <typename Stack>
 }
 
 template <typename Fn>
-[[nodiscard]] double best_of(int repeats, Fn&& fn) {
+[[nodiscard]] double best_of(int repeats, const Fn& fn) {
     double best = 0.0;
     for (int i = 0; i < repeats; ++i) {
         best = std::max(best, fn());
@@ -224,8 +224,8 @@ struct RegisterResult {
 
 /// One writer publishes continuously while one reader polls for `duration`.
 template <typename Write, typename Read>
-[[nodiscard]] RegisterResult register_rates(std::chrono::milliseconds duration, Write&& write,
-                                            Read&& read) {
+[[nodiscard]] RegisterResult register_rates(std::chrono::milliseconds duration, const Write& write,
+                                            const Read& read) {
     std::atomic<bool> stop{false};
     std::uint64_t writes = 0;
     std::thread writer([&] {
@@ -298,13 +298,16 @@ void run_queue_section(const Options& opt) {
         const double mpmc = best_of(opt.repeats, [&] { return queue_throughput<Mpmc>(p, c, opt.ops); });
         const double mutex = best_of(opt.repeats, [&] { return queue_throughput<Mutex>(p, c, opt.ops); });
         double best = mpmc;
-        char spsc_cell[32] = "-";  // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+        std::string spsc_cell = "-";
         if (p == 1 && c == 1) {
             const double spsc = best_of(opt.repeats, [&] { return queue_throughput<Spsc>(1, 1, opt.ops); });
-            std::snprintf(spsc_cell, sizeof spsc_cell, "%.1f", spsc);
+            std::array<char, 32> text{};
+            std::snprintf(text.data(), text.size(), "%.1f", spsc);
+            spsc_cell = text.data();
             best = std::max(best, spsc);
         }
-        std::printf("| %u x %u | %s | %.1f | %.1f | %.1fx |\n", p, c, spsc_cell, mpmc, mutex, best / mutex);
+        std::printf("| %u x %u | %s | %.1f | %.1f | %.1fx |\n", p, c, spsc_cell.c_str(), mpmc, mutex,
+                    best / mutex);
         std::fflush(stdout);
     }
     std::printf("\n");

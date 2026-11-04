@@ -56,4 +56,20 @@ struct Tracked {
     int value;
 };
 
+/// Move-only payload; a moved-from instance holds -1.
+struct MoveOnly {
+    explicit MoveOnly(int v = 0) noexcept : value(v) {}
+    MoveOnly(const MoveOnly&) = delete;
+    MoveOnly& operator=(const MoveOnly&) = delete;
+    MoveOnly(MoveOnly&& other) noexcept : value(other.value) { other.value = -1; }
+    MoveOnly& operator=(MoveOnly&& other) noexcept {
+        value = other.value;
+        other.value = -1;
+        return *this;
+    }
+    ~MoveOnly() = default;
+
+    int value;
+};
+
 }  // namespace lfc_test
