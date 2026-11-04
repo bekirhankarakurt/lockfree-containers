@@ -3,6 +3,11 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to tag and release from main (e.g. 1.0.0)"
+        required: true
 
 permissions:
   contents: write
@@ -12,10 +17,24 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+      - name: Create tag (manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          tag="v${VERSION_INPUT}"
+          git config user.name "Bekirhan Karakurt"
+          git config user.email "142732001+bekirhankarakurt@users.noreply.github.com"
+          git tag -a "${tag}" -m "lockfree-containers ${VERSION_INPUT}"
+          git push origin "${tag}"
+          echo "TAG=${tag}" >> "$GITHUB_ENV"
+      - name: Resolve tag (tag push)
+        if: github.event_name == 'push'
+        run: echo "TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
       - name: Check tag matches project version
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          grep -q "VERSION ${version}" CMakeLists.txt || { echo "tag ${GITHUB_REF_NAME} != CMake version"; exit 1; }
+          version="${TAG#v}"
+          grep -q "VERSION ${version}" CMakeLists.txt || { echo "tag ${TAG} != CMake version"; exit 1; }
           grep -q "## \[${version}\]" CHANGELOG.md || { echo "CHANGELOG has no ${version} section"; exit 1; }
           echo "VERSION=${version}" >> "$GITHUB_ENV"
       - name: Build and test
@@ -45,8 +64,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
+          gh release create "${TAG}" \
             "dist/lfc-${VERSION}-linux-x86_64.tar.gz" dist/SHA256SUMS \
-            --title "lockfree-containers ${GITHUB_REF_NAME}" \
+            --title "lockfree-containers ${TAG}" \
             --notes-file dist/NOTES.md \
             --verify-tag
